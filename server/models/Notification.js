@@ -20,7 +20,13 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["assignment", "status_change", "note_added", "lead_updated", "system"],
+      enum: [
+        "NEW_LEAD_REQUEST",
+        "LEAD_ASSIGNED",
+        "STATUS_UPDATED",
+        "NOTE_ADDED",
+        "LEAD_REASSIGNED",
+      ],
       required: true,
     },
     isRead: {
@@ -28,7 +34,7 @@ const notificationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
-    lead: {
+    relatedLead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Lead",
     },

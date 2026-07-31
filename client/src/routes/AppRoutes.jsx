@@ -10,6 +10,7 @@ import EditLead from "../pages/dashboard/EditLead";
 import Members from "../pages/dashboard/Members";
 import Requests from "../pages/dashboard/Requests";
 import Profile from "../pages/dashboard/Profile";
+import Notifications from "../pages/dashboard/Notifications";
 
 import ProtectedRoute from "../components/ProtectedRoute";
 import RoleRoute from "../components/RoleRoute";
@@ -60,6 +61,7 @@ export default function AppRoutes() {
           }
         />
         {/* Both roles can access */}
+        <Route path="notifications" element={<Notifications />} />
         <Route path="profile" element={<Profile />} />
         {/* Both roles can access — component adapts based on role */}
         <Route path="leads/:id/edit" element={<EditLead />} />

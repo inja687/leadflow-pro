@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight, Target, Star, BarChart3, ClipboardList, CheckSquare, RefreshCw } from "lucide-react";
+import { ChevronRight, Target, Star, BarChart3, ClipboardList, CheckSquare, RefreshCw, Bell } from "lucide-react";
 import api from "../../services/api";
 import useAuth from "../../hooks/useAuth";
 
@@ -73,6 +73,7 @@ export default function Dashboard() {
   const [myLeads, setMyLeads] = useState([]);
   const [activities, setActivities] = useState([]);
   const [recentRequests, setRecentRequests] = useState([]);
+  const [recentNotifications, setRecentNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [performanceData, setPerformanceData] = useState({
@@ -86,6 +87,16 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
+
+      // Fetch recent notifications for widget
+      try {
+        const notifRes = await api.get("/notifications", { params: { page: 1, limit: 5 } });
+        if (notifRes.data.success) {
+          setRecentNotifications(notifRes.data.notifications || []);
+        }
+      } catch (nErr) {
+        console.error("Failed to load dashboard recent notifications:", nErr);
+      }
 
       if (!isAdmin) {
         // Load personal performance stats for Member
@@ -316,8 +327,8 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Today's Tasks & Pending Follow Ups Cards */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Today's Tasks, Pending Follow Ups & My Notifications Cards */}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           {/* Today's Tasks Feed */}
           <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] flex flex-col h-[350px]">
             <div className="mb-5 flex items-center gap-2.5 shrink-0">
@@ -406,6 +417,52 @@ export default function Dashboard() {
                 <div className="text-3xl mb-2">🤝</div>
                 <p className="text-sm font-semibold text-slate-700">All follow ups completed!</p>
                 <p className="text-xs text-slate-400 mt-0.5">Keep filling the pipeline with new leads.</p>
+              </div>
+            )}
+          </div>
+
+          {/* My Notifications Widget */}
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] flex flex-col h-[350px]">
+            <div className="mb-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-violet-50 p-2 text-violet-600 ring-1 ring-violet-100"><Bell className="h-4.5 w-4.5" /></div>
+                <div>
+                  <h2 className="font-display text-base font-bold text-slate-900">My Notifications</h2>
+                  <p className="text-xs text-slate-400">Latest activity updates</p>
+                </div>
+              </div>
+              <Link to="/dashboard/notifications" className="text-xs font-semibold text-violet-600 hover:text-violet-700">View all</Link>
+            </div>
+
+            {loading ? (
+              <div className="space-y-3 flex-1 overflow-hidden">
+                {[...Array(3)].map((_, index) => (
+                  <div key={index} className="h-16 rounded-xl bg-slate-100 animate-pulse" />
+                ))}
+              </div>
+            ) : recentNotifications.length ? (
+              <div className="space-y-3 overflow-y-auto flex-1 pr-1.5 scrollbar-thin">
+                {recentNotifications.map((notif) => (
+                  <Link
+                    key={notif._id}
+                    to="/dashboard/notifications"
+                    className={`block p-3 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors ${
+                      !notif.isRead ? "bg-violet-50/40 font-semibold" : "bg-slate-50/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold text-slate-800 truncate">{notif.title}</p>
+                      <span className="text-[10px] text-slate-400 shrink-0">{formatTime(notif.createdAt)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 truncate mt-0.5">{notif.message}</p>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center flex-1 text-center py-6">
+                <div className="text-3xl mb-2">🔔</div>
+                <p className="text-sm font-semibold text-slate-700">No notifications yet!</p>
+                <p className="text-xs text-slate-400 mt-0.5">System updates will appear here.</p>
               </div>
             )}
           </div>
@@ -645,44 +702,98 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Admin Only: Recent Pending Requests */}
+      {/* Admin Only: Recent Pending Requests & Recent Notifications Widgets */}
       {isAdmin && (
-        <section className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] animate-[fade-in-up_0.4s_ease-out]">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-lg font-bold text-slate-900">Recent Pending Requests</h2>
-              <p className="mt-1 text-sm text-slate-500">Incoming contact form submissions awaiting review</p>
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 animate-[fade-in-up_0.4s_ease-out]">
+          {/* Pending Requests Widget */}
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-slate-900">Recent Pending Requests</h2>
+                <p className="mt-1 text-sm text-slate-500">Incoming contact form submissions awaiting review</p>
+              </div>
+              <Link to="/dashboard/requests" className="text-sm font-semibold text-violet-600 transition-colors hover:text-violet-700">View all</Link>
             </div>
-            <Link to="/dashboard/requests" className="text-sm font-semibold text-violet-600 transition-colors hover:text-violet-700">View all</Link>
-          </div>
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(3)].map((_, index) => (
-                <div key={index} className="relative h-16 overflow-hidden rounded-xl bg-slate-100/80">
-                  <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                </div>
-              ))}
-            </div>
-          ) : recentRequests.length ? (
-            <div className="divide-y divide-slate-100/80">
-              {recentRequests.map((req) => (
-                <div key={req._id} className="group flex items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800 group-hover:text-violet-700 transition-colors">{req.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{req.email} · {req.company || "No Company"}</p>
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, index) => (
+                  <div key={index} className="relative h-16 overflow-hidden rounded-xl bg-slate-100/80">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/70 to-transparent" />
                   </div>
-                  <Link to="/dashboard/requests" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
-                    Review <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                  </Link>
+                ))}
+              </div>
+            ) : recentRequests.length ? (
+              <div className="divide-y divide-slate-100/80">
+                {recentRequests.map((req) => (
+                  <div key={req._id} className="group flex items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 group-hover:text-violet-700 transition-colors">{req.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{req.email} · {req.company || "No Company"}</p>
+                    </div>
+                    <Link to="/dashboard/requests" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
+                      Review <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="mb-3 text-4xl">📨</div>
+                <p className="text-sm text-slate-400">All caught up! No pending lead requests.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Notifications Widget */}
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-violet-50 p-2 text-violet-600 ring-1 ring-violet-100"><Bell className="h-4.5 w-4.5" /></div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-slate-900">Recent Notifications</h2>
+                  <p className="mt-0.5 text-sm text-slate-500">System alerts and activity updates</p>
                 </div>
-              ))}
+              </div>
+              <Link to="/dashboard/notifications" className="text-sm font-semibold text-violet-600 transition-colors hover:text-violet-700">View all</Link>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 text-4xl">📨</div>
-              <p className="text-sm text-slate-400">All caught up! No pending lead requests.</p>
-            </div>
-          )}
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, index) => (
+                  <div key={index} className="relative h-16 overflow-hidden rounded-xl bg-slate-100/80">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+                  </div>
+                ))}
+              </div>
+            ) : recentNotifications.length ? (
+              <div className="divide-y divide-slate-100/80">
+                {recentNotifications.map((notif) => (
+                  <Link
+                    key={notif._id}
+                    to="/dashboard/notifications"
+                    className={`group flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 transition-colors ${
+                      !notif.isRead ? "font-semibold" : ""
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm ${!notif.isRead ? "text-slate-900 font-bold" : "text-slate-700"}`}>
+                          {notif.title}
+                        </p>
+                        {!notif.isRead && <span className="h-1.5 w-1.5 rounded-full bg-violet-600 shrink-0" />}
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">{notif.message}</p>
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-400 shrink-0">{formatTime(notif.createdAt)}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="mb-3 text-4xl">🔔</div>
+                <p className="text-sm text-slate-400">No recent notifications.</p>
+              </div>
+            )}
+          </div>
         </section>
       )}
     </div>

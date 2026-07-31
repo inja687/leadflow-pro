@@ -1,179 +1,131 @@
 import Notification from "../models/Notification.js";
-import Lead from "../models/Lead.js";
 import User from "../models/User.js";
 
 /**
- * Automatically analyze an activity log record and generate inside-app notifications
- * for relevant assignees (members) and workspace administrators.
- *
- * @param {Object} activity - The activity document
+ * Utility to notify all active admin users of a new public lead request
  */
-export const createNotificationsForActivity = async (activity) => {
+export const notifyAdminsNewLeadRequest = async ({ name, company }) => {
   try {
-    const { lead, action, performedBy } = activity;
-    if (!lead) return;
-
-    // 1. Retrieve Lead with assignment detail
-    const leadDoc = await Lead.findById(lead);
-    if (!leadDoc) return;
-
-    // 2. Retrieve actor information
-    const performer = await User.findById(performedBy).select("name");
-    const performerName = performer ? performer.name : "System";
-
-    // 3. Find active admins
     const admins = await User.find({ role: "admin", status: "active" });
+    if (!admins.length) return;
 
-    // Helper to filter out the actor (so they don't receive alerts about their own actions)
-    const isPerformer = (userId) => userId.toString() === performedBy.toString();
+    const companyText = company ? ` (${company})` : "";
+    const notifications = admins.map((admin) => ({
+      recipient: admin._id,
+      title: "New Lead Request Received",
+      message: `A new contact request was submitted by "${name}"${companyText}.`,
+      type: "NEW_LEAD_REQUEST",
+    }));
 
-    const notifications = [];
-
-    // Check action type and generate notifications
-    switch (action) {
-      case "lead_assigned": {
-        // Find current assignee
-        const assigneeId = leadDoc.assignedTo;
-        if (assigneeId) {
-          const assignee = await User.findById(assigneeId).select("name");
-          // Notify Assignee
-          notifications.push({
-            recipient: assigneeId,
-            title: "New Lead Assigned",
-            message: `You have been assigned a new lead: "${leadDoc.name}" by ${performerName}.`,
-            type: "assignment",
-            lead: leadDoc._id,
-          });
-
-          // Notify other Admins about the assignment
-          for (const admin of admins) {
-            if (!isPerformer(admin._id) && admin._id.toString() !== assigneeId.toString()) {
-              notifications.push({
-                recipient: admin._id,
-                title: "Lead Assigned",
-                message: `${performerName} assigned lead "${leadDoc.name}" to ${assignee ? assignee.name : "Member"}.`,
-                type: "assignment",
-                lead: leadDoc._id,
-              });
-            }
-          }
-        }
-        break;
-      }
-
-      case "status_changed": {
-        const assigneeId = leadDoc.assignedTo;
-        // Notify Assignee (if changed by someone else)
-        if (assigneeId && !isPerformer(assigneeId)) {
-          notifications.push({
-            recipient: assigneeId,
-            title: "Lead Status Updated",
-            message: `The status of your assigned lead "${leadDoc.name}" was changed to "${leadDoc.status}" by ${performerName}.`,
-            type: "status_change",
-            lead: leadDoc._id,
-          });
-        }
-
-        // Notify Admins
-        for (const admin of admins) {
-          if (!isPerformer(admin._id)) {
-            notifications.push({
-              recipient: admin._id,
-              title: "Lead Status Updated",
-              message: `${performerName} changed status of "${leadDoc.name}" to "${leadDoc.status}".`,
-              type: "status_change",
-              lead: leadDoc._id,
-            });
-          }
-        }
-        break;
-      }
-
-      case "note_added": {
-        const assigneeId = leadDoc.assignedTo;
-        // Notify Assignee
-        if (assigneeId && !isPerformer(assigneeId)) {
-          notifications.push({
-            recipient: assigneeId,
-            title: "New Note Added",
-            message: `${performerName} added a new note to your assigned lead "${leadDoc.name}".`,
-            type: "note_added",
-            lead: leadDoc._id,
-          });
-        }
-
-        // Notify Admins
-        for (const admin of admins) {
-          if (!isPerformer(admin._id)) {
-            notifications.push({
-              recipient: admin._id,
-              title: "New Note Added",
-              message: `${performerName} added a note to lead "${leadDoc.name}".`,
-              type: "note_added",
-              lead: leadDoc._id,
-            });
-          }
-        }
-        break;
-      }
-
-      case "lead_updated": {
-        const assigneeId = leadDoc.assignedTo;
-        // Notify Assignee
-        if (assigneeId && !isPerformer(assigneeId)) {
-          notifications.push({
-            recipient: assigneeId,
-            title: "Lead Profile Updated",
-            message: `The details of your assigned lead "${leadDoc.name}" were updated by ${performerName}.`,
-            type: "lead_updated",
-            lead: leadDoc._id,
-          });
-        }
-
-        // Notify Admins
-        for (const admin of admins) {
-          if (!isPerformer(admin._id)) {
-            notifications.push({
-              recipient: admin._id,
-              title: "Lead Details Updated",
-              message: `${performerName} updated details of lead "${leadDoc.name}".`,
-              type: "lead_updated",
-              lead: leadDoc._id,
-            });
-          }
-        }
-        break;
-      }
-
-      default:
-        // Do not generate notifications for other action types
-        break;
-    }
-
-    if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
-    }
+    await Notification.insertMany(notifications);
   } catch (error) {
-    console.error("Failed to generate notifications for activity:", error.message);
+    console.error("Failed to notify admins of new lead request:", error.message);
   }
 };
 
 /**
- * Creates system alerts for all active workspace administrators.
- * Used for incoming lead request captures.
- *
- * @param {Object} params
- * @param {string} params.title
- * @param {string} params.message
+ * Utility to notify a member when assigned a lead
+ */
+export const notifyMemberLeadAssigned = async ({ recipientId, leadId, leadName }) => {
+  try {
+    if (!recipientId) return;
+
+    await Notification.create({
+      recipient: recipientId,
+      title: "New Lead Assigned",
+      message: `You have been assigned lead: "${leadName}".`,
+      type: "LEAD_ASSIGNED",
+      relatedLead: leadId,
+    });
+  } catch (error) {
+    console.error("Failed to notify member of lead assignment:", error.message);
+  }
+};
+
+/**
+ * Utility to notify a member when a lead is reassigned to them
+ */
+export const notifyMemberLeadReassigned = async ({ recipientId, leadId, leadName }) => {
+  try {
+    if (!recipientId) return;
+
+    await Notification.create({
+      recipient: recipientId,
+      title: "Lead Reassigned",
+      message: `You have been assigned lead: "${leadName}".`,
+      type: "LEAD_REASSIGNED",
+      relatedLead: leadId,
+    });
+  } catch (error) {
+    console.error("Failed to notify member of lead reassignment:", error.message);
+  }
+};
+
+/**
+ * Utility to notify all active admins when a member updates lead status
+ */
+export const notifyAdminsStatusUpdated = async ({ leadId, leadName, updatedByName, newStatus }) => {
+  try {
+    const admins = await User.find({ role: "admin", status: "active" });
+    if (!admins.length) return;
+
+    const notifications = admins.map((admin) => ({
+      recipient: admin._id,
+      title: "Lead Status Updated",
+      message: `${updatedByName} updated status of "${leadName}" to "${newStatus}".`,
+      type: "STATUS_UPDATED",
+      relatedLead: leadId,
+    }));
+
+    await Notification.insertMany(notifications);
+  } catch (error) {
+    console.error("Failed to notify admins of status update:", error.message);
+  }
+};
+
+/**
+ * Utility to notify all active admins when a member adds a note to a lead
+ */
+export const notifyAdminsNoteAdded = async ({ leadId, leadName, addedByName }) => {
+  try {
+    const admins = await User.find({ role: "admin", status: "active" });
+    if (!admins.length) return;
+
+    const notifications = admins.map((admin) => ({
+      recipient: admin._id,
+      title: "Note Added to Lead",
+      message: `${addedByName} added a note to lead "${leadName}".`,
+      type: "NOTE_ADDED",
+      relatedLead: leadId,
+    }));
+
+    await Notification.insertMany(notifications);
+  } catch (error) {
+    console.error("Failed to notify admins of note addition:", error.message);
+  }
+};
+
+/**
+ * Legacy compatibility export for activity-based notification trigger
+ */
+export const createNotificationsForActivity = async (activity) => {
+  // Main notifications are now handled directly by specific event triggers above
+  return;
+};
+
+/**
+ * Legacy compatibility export for system notifications
  */
 export const createSystemNotification = async ({ title, message }) => {
   try {
     const admins = await User.find({ role: "admin", status: "active" });
+    if (!admins.length) return;
+
     const notifications = admins.map((admin) => ({
       recipient: admin._id,
       title,
       message,
-      type: "system",
+      type: "NEW_LEAD_REQUEST",
     }));
 
     if (notifications.length > 0) {

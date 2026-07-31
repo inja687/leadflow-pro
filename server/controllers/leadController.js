@@ -3,7 +3,13 @@ import User from "../models/User.js";
 import Activity from "../models/Activity.js";
 import LeadRequest from "../models/LeadRequest.js";
 import { logActivity } from "../utils/activityHelper.js";
-import { createSystemNotification } from "../utils/notificationHelper.js";
+import {
+  notifyAdminsNewLeadRequest,
+  notifyMemberLeadAssigned,
+  notifyMemberLeadReassigned,
+  notifyAdminsStatusUpdated,
+  notifyAdminsNoteAdded,
+} from "../utils/notificationHelper.js";
 
 // =========================
 // Public Lead Capture (No Auth Required)
@@ -42,9 +48,9 @@ export const submitPublicLead = async (req, res) => {
     });
 
     // Trigger notification to admins
-    createSystemNotification({
-      title: "New Incoming Request",
-      message: `A new contact form was submitted by "${name.trim()}" (${company ? company.trim() : "No Company"}).`,
+    await notifyAdminsNewLeadRequest({
+      name: name.trim(),
+      company: company ? company.trim() : "",
     });
 
     res.status(201).json({
@@ -98,6 +104,12 @@ export const createLead = async (req, res) => {
         action: "lead_assigned",
         performedBy: req.user._id,
         details: `Lead assigned to ${targetUser?.name || "a user"}`,
+      });
+
+      await notifyMemberLeadAssigned({
+        recipientId: assignedTo,
+        leadId: lead._id,
+        leadName: lead.name,
       });
     }
 
@@ -263,6 +275,13 @@ export const updateLead = async (req, res) => {
           performedBy: req.user._id,
           details: `Status changed from "${oldStatus}" to "${status}"`,
         });
+
+        await notifyAdminsStatusUpdated({
+          leadId: lead._id,
+          leadName: lead.name,
+          updatedByName: req.user.name,
+          newStatus: status,
+        });
       }
 
       const updatedLead = await Lead.findById(lead._id)
@@ -278,6 +297,9 @@ export const updateLead = async (req, res) => {
 
     // Admin: full update — detect what changed
     const statusChanged = req.body.status && req.body.status !== oldStatus;
+    const oldAssignedTo = lead.assignedTo ? lead.assignedTo.toString() : null;
+    const newAssignedTo = req.body.assignedTo ? req.body.assignedTo.toString() : null;
+    const assignmentChanged = newAssignedTo && newAssignedTo !== oldAssignedTo;
     const fieldsChanged =
       (req.body.name && req.body.name !== lead.name) ||
       (req.body.email && req.body.email !== lead.email) ||
@@ -288,12 +310,29 @@ export const updateLead = async (req, res) => {
       req.params.id,
       req.body,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     )
       .populate("assignedTo", "name email role")
       .populate("notes.addedBy", "name email");
+
+    // Trigger notification if assignment changed
+    if (assignmentChanged) {
+      if (oldAssignedTo) {
+        await notifyMemberLeadReassigned({
+          recipientId: newAssignedTo,
+          leadId: updatedLead._id,
+          leadName: updatedLead.name,
+        });
+      } else {
+        await notifyMemberLeadAssigned({
+          recipientId: newAssignedTo,
+          leadId: updatedLead._id,
+          leadName: updatedLead.name,
+        });
+      }
+    }
 
     // Log: status changed (only if actually different)
     if (statusChanged) {
@@ -488,10 +527,19 @@ export const assignLead = async (req, res) => {
       });
     }
 
+    const existingLead = await Lead.findById(req.params.id);
+    if (!existingLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+    const oldAssignedTo = existingLead.assignedTo ? existingLead.assignedTo.toString() : null;
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       { assignedTo },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     )
       .populate("assignedTo", "name email role")
       .populate("notes.addedBy", "name email");
@@ -500,6 +548,21 @@ export const assignLead = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Lead not found",
+      });
+    }
+
+    // Trigger notification
+    if (oldAssignedTo && oldAssignedTo !== assignedTo.toString()) {
+      await notifyMemberLeadReassigned({
+        recipientId: assignedTo,
+        leadId: lead._id,
+        leadName: lead.name,
+      });
+    } else if (!oldAssignedTo) {
+      await notifyMemberLeadAssigned({
+        recipientId: assignedTo,
+        leadId: lead._id,
+        leadName: lead.name,
       });
     }
 
@@ -568,6 +631,15 @@ export const addNote = async (req, res) => {
     });
 
     await lead.save();
+
+    // Notify admins if added by member
+    if (req.user.role === "member") {
+      await notifyAdminsNoteAdded({
+        leadId: lead._id,
+        leadName: lead.name,
+        addedByName: req.user.name,
+      });
+    }
 
     // Log: note added
     await logActivity({

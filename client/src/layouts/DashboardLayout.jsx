@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
+import NotificationBell from "../components/ui/NotificationBell";
 
 const allNavItems = [
   { to: "/dashboard", label: "Dashboard", icon: "📊", end: true, roles: ["admin", "member"] },
   { to: "/dashboard/leads", label: "Leads", icon: "👥", end: false, roles: ["admin", "member"] },
   { to: "/dashboard/members", label: "Members", icon: "👤", end: false, roles: ["admin"] },
   { to: "/dashboard/requests", label: "Incoming Requests", icon: "📨", end: false, roles: ["admin"] },
+  { to: "/dashboard/notifications", label: "Notifications", icon: "🔔", end: false, roles: ["admin", "member"] },
   { to: "/dashboard/profile", label: "Profile", icon: "⚙️", end: false, roles: ["admin", "member"] },
 ];
 
@@ -148,7 +150,9 @@ export default function DashboardLayout() {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="hidden items-center gap-2.5 sm:flex">
+              <NotificationBell />
+
+              <div className="hidden items-center gap-2.5 sm:flex border-l border-slate-200/60 pl-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-indigo-100 text-xs font-bold text-violet-700 ring-2 ring-violet-100">
                   {user?.name?.charAt(0).toUpperCase() || "U"}
                 </div>

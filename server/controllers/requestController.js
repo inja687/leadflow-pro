@@ -2,6 +2,7 @@ import LeadRequest from "../models/LeadRequest.js";
 import Lead from "../models/Lead.js";
 import User from "../models/User.js";
 import { logActivity } from "../utils/activityHelper.js";
+import { notifyMemberLeadAssigned } from "../utils/notificationHelper.js";
 
 // =========================
 // Get All Lead Requests (Admin Only)
@@ -117,6 +118,12 @@ export const approveRequest = async (req, res) => {
         action: "lead_assigned",
         performedBy: req.user._id,
         details: `Lead assigned to ${assignedUser.name}`,
+      });
+
+      await notifyMemberLeadAssigned({
+        recipientId: assignedTo,
+        leadId: lead._id,
+        leadName: lead.name,
       });
     }
 
