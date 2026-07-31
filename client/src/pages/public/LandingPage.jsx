@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../services/api";
 
 import LandingNavbar from "../../components/landing/LandingNavbar";
 import HeroSection from "../../components/landing/HeroSection";
@@ -13,11 +13,6 @@ import TestimonialsSection from "../../components/landing/TestimonialsSection";
 import FAQSection from "../../components/landing/FAQSection";
 import ContactSection from "../../components/landing/ContactSection";
 import LandingFooter from "../../components/landing/LandingFooter";
-
-const publicAxios = axios.create({
-  baseURL: "http://localhost:5000/api",
-  headers: { "Content-Type": "application/json" },
-});
 
 const INITIAL_FORM = {
   name: "",
@@ -66,7 +61,7 @@ export default function LandingPage() {
     try {
       setLoading(true);
       setServerError(null);
-      await publicAxios.post("/public/leads", form);
+      await api.post("/public/leads", form);
       navigate("/thank-you");
     } catch (err) {
       setServerError(
