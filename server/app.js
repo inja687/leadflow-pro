@@ -12,15 +12,22 @@ import publicRoutes from "./routes/publicRoutes.js";
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://leadflow-pro-nu.vercel.app",
+];
+if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
+  allowedOrigins.push(process.env.CLIENT_URL);
+}
+if (process.env.FRONTEND_URL && !allowedOrigins.includes(process.env.FRONTEND_URL)) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 // Middleware
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "http://localhost:5174",
-      "http://127.0.0.1:5174",
-    ],
+    origin: allowedOrigins,
     credentials: true,
   })
 );
